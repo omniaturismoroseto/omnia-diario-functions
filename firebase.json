@@ -1,0 +1,9 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "diario",
+      "ignore": ["node_modules", ".git"]
+    }
+  ]
+}
