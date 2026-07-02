@@ -253,6 +253,9 @@ async function inviaPromemoria(turno, hStart, hEnd) {
         }).format(dt);
         if (dateRoma !== todayRoma) return false;
 
+        // Se giornata intera conta per entrambi i turni
+        if (d.giornataintera === true) return true;
+
         // Controlla l'ora in ora di Roma
         const hourRoma = parseInt(
           new Intl.DateTimeFormat("en-US", {
