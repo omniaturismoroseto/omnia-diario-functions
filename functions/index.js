@@ -226,12 +226,18 @@ async function inviaPromemoria(turno, hStart, hEnd) {
   const start = new Date(nowRoma); start.setHours(hStart, 0, 0, 0);
   const end   = new Date(nowRoma); end.setHours(hEnd,   0, 0, 0);
 
-  // Carica tutti i documenti e filtra lato server per evitare problemi di indici
+  // Carica tutti i documenti e filtra per data e ora in timezone Roma
   const snap = await admin
     .firestore()
     .collection("diariogiornaliero")
     .limit(500)
     .get();
+
+  // Data di oggi in formato Roma (YYYY-MM-DD)
+  const todayRoma = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
 
   const compiled = new Set(
     snap.docs
@@ -239,7 +245,22 @@ async function inviaPromemoria(turno, hStart, hEnd) {
       .filter((d) => {
         if (!d.dataOra) return false;
         const dt = d.dataOra.toDate ? d.dataOra.toDate() : new Date(d.dataOra);
-        return dt >= start && dt < end;
+
+        // Controlla che sia oggi in ora di Roma
+        const dateRoma = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Europe/Rome",
+          year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(dt);
+        if (dateRoma !== todayRoma) return false;
+
+        // Controlla l'ora in ora di Roma
+        const hourRoma = parseInt(
+          new Intl.DateTimeFormat("en-US", {
+            timeZone: "Europe/Rome",
+            hour: "numeric", hour12: false,
+          }).format(dt)
+        );
+        return hourRoma >= hStart && hourRoma < hEnd;
       })
       .map((d) => d.postazione)
       .filter(Boolean)
