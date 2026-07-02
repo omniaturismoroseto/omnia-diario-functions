@@ -265,7 +265,11 @@ async function inviaPromemoria(turno, hStart, hEnd) {
       `⏰ *OMNIA Diario — ${labelTurno}*\n` +
       `📅 ${oggi} ore ${oraRem}\n\n` +
       `*${missing.length} postazioni non hanno ancora compilato:*\n` +
-      missing.map((p) => `• ${p}`).join("\n") +
+      missing.map((p) => {
+        const lidi = LIDI_MAP[p] || [];
+        const lidiStr = lidi.length ? ` (${lidi.join(", ")})` : "";
+        return `• ${p}${lidiStr}`;
+      }).join("\n") +
       `\n\n✅ Compilate: ${compiled.size}/26\n` +
       `📋 adriaticlifeguardservice.it/admin\\-diario`;
   }
