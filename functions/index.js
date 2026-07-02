@@ -226,15 +226,23 @@ async function inviaPromemoria(turno, hStart, hEnd) {
   const start = new Date(nowRoma); start.setHours(hStart, 0, 0, 0);
   const end   = new Date(nowRoma); end.setHours(hEnd,   0, 0, 0);
 
+  // Carica tutti i documenti e filtra lato server per evitare problemi di indici
   const snap = await admin
     .firestore()
     .collection("diariogiornaliero")
-    .where("dataOra", ">=", start)
-    .where("dataOra", "<",  end)
+    .limit(500)
     .get();
 
   const compiled = new Set(
-    snap.docs.map((d) => d.data().postazione).filter(Boolean)
+    snap.docs
+      .map((d) => d.data())
+      .filter((d) => {
+        if (!d.dataOra) return false;
+        const dt = d.dataOra.toDate ? d.dataOra.toDate() : new Date(d.dataOra);
+        return dt >= start && dt < end;
+      })
+      .map((d) => d.postazione)
+      .filter(Boolean)
   );
   const missing = ALL_STATIONS.filter((p) => !compiled.has(p));
 
