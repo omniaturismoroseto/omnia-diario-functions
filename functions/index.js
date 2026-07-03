@@ -157,32 +157,51 @@ exports.onDiarioCreato = onDocumentCreated(
   {
     document: "diariogiornaliero/{docId}",
     region:   REGION,
+    retry:    true,  // riprova automaticamente in caso di errore
   },
   async (event) => {
     const data     = event.data.data();
+    const docId    = event.params.docId;
     const mancanze = getMancanze(data);
-
-    if (!mancanze.length) {
-      console.log(`Diario ${event.params.docId}: nessuna mancanza`);
-      return null;
-    }
-
-    const preview = mancanze.slice(0, 4).join(", ");
-    const extra   = mancanze.length > 4 ? ` +${mancanze.length - 4} altro` : "";
-    const dt      = data.dataOra?.toDate
+    const dt       = data.dataOra?.toDate
       ? data.dataOra.toDate()
       : new Date(data.dataOra);
     const ora = dt.toLocaleTimeString("it-IT", {
       hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome",
     });
 
-    const msg =
-      `⚠️ *Mancanze segnalate — ${data.postazione}*\n` +
-      `🕐 Ore ${ora} · ${data.bagnino || "Bagnino"}\n\n` +
-      `${mancanze.map((m) => `• ${m}`).join("\n")}`;
+    let msg;
+    if (mancanze.length > 0) {
+      msg =
+        `⚠️ *Mancanze — ${data.postazione}*\n` +
+        `🕐 Ore ${ora} · ${data.bagnino || "Bagnino"}\n` +
+        `🏖 Lidi: ${(LIDI_MAP[data.postazione] || []).join(", ")}\n\n` +
+        `${mancanze.map((m) => `• ${m}`).join("\n")}`;
+    } else {
+      // Notifica anche per diari senza mancanze
+      msg =
+        `✅ *Diario compilato — ${data.postazione}*\n` +
+        `🕐 Ore ${ora} · ${data.bagnino || "Bagnino"}\n` +
+        `🏖 ${(LIDI_MAP[data.postazione] || []).join(", ")}\n` +
+        `Checklist completa`;
+    }
 
-    await sendTelegram(msg);
-    console.log(`Push diario: ${data.postazione}, ${mancanze.length} mancanze`);
+    try {
+      await sendTelegram(msg);
+      // Salva log su Firestore per debug
+      await admin.firestore().collection("diarioLog").doc(docId).set({
+        postazione: data.postazione,
+        bagnino:    data.bagnino,
+        mancanze:   mancanze.length,
+        notificato: true,
+        ts:         admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`Notifica inviata: ${data.postazione}, ${mancanze.length} mancanze`);
+    } catch (err) {
+      console.error(`Errore notifica ${docId}:`, err.message);
+      // Non bloccare — il retry si occuperà di riprovare
+      throw err;
+    }
     return null;
   }
 );
@@ -207,6 +226,34 @@ exports.promemoriaMattina = onSchedule(
 exports.promemoriaPomeriggio = onSchedule(
   {
     schedule:  "0 15 * * *",
+    timeZone:  "Europe/Rome",
+    region:    REGION,
+  },
+  async () => {
+    await inviaPromemoria("pomeriggio", 14, 19);
+  }
+);
+
+// ────────────────────────────────────────────────────────────
+// 4) SECONDO PROMEMORIA MATTINA — 12:00 ora di Roma
+// ────────────────────────────────────────────────────────────
+exports.promemoriaMattina2 = onSchedule(
+  {
+    schedule:  "0 12 * * *",
+    timeZone:  "Europe/Rome",
+    region:    REGION,
+  },
+  async () => {
+    await inviaPromemoria("mattina", 9, 14);
+  }
+);
+
+// ────────────────────────────────────────────────────────────
+// 5) SECONDO PROMEMORIA POMERIGGIO — 17:00 ora di Roma
+// ────────────────────────────────────────────────────────────
+exports.promemoriaPomeriggio2 = onSchedule(
+  {
+    schedule:  "0 17 * * *",
     timeZone:  "Europe/Rome",
     region:    REGION,
   },
