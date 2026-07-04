@@ -242,79 +242,75 @@ async function inviaPromemoria(turno, hStart, hEnd, oraRem) {
 const { onRequest } = require("firebase-functions/v2/https");
 
 exports.telegramWebhook = onRequest(
-  { region: REGION, invoker: "public", cors: false },
+  { region: REGION, invoker: "public", cors: false, timeoutSeconds: 30 },
   async (req, res) => {
-    res.status(200).send("OK"); // risponde subito a Telegram
+    try {
+      const body = req.body;
+      if (!body || !body.message) { res.status(200).send("OK"); return; }
 
-    const body = req.body;
-    if (!body || !body.message) return;
+      const chatId = body.message.chat.id;
+      const text   = (body.message.text || "").trim().toLowerCase().split("@")[0];
 
-    const chatId  = body.message.chat.id;
-    const text    = (body.message.text || "").trim().toLowerCase().split("@")[0];
+      if (text === "/mancanti" || text === "/stato") {
+        const snap = await admin.firestore().collection("diariogiornaliero").limit(1000).get();
 
-    if (text === "/mancanti" || text === "/stato") {
-      const snap = await admin.firestore().collection("diariogiornaliero").limit(1000).get();
-
-      const todayRoma = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit",
-      }).format(new Date());
-
-      const matOk = new Set(), pomOk = new Set();
-
-      snap.docs.map(d => d.data()).forEach(d => {
-        if (!d.dataOra || !d.postazione) return;
-        const dt = d.dataOra.toDate ? d.dataOra.toDate() : new Date(d.dataOra);
-
-        const dateRoma = new Intl.DateTimeFormat("en-CA", {
+        const todayRoma = new Intl.DateTimeFormat("en-CA", {
           timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit",
-        }).format(dt);
-        if (dateRoma !== todayRoma) return;
+        }).format(new Date());
 
-        if (d.giornataintera === true) {
-          matOk.add(d.postazione); pomOk.add(d.postazione); return;
-        }
+        const matOk = new Set(), pomOk = new Set();
+        snap.docs.map(d => d.data()).forEach(d => {
+          if (!d.dataOra || !d.postazione) return;
+          const dt = d.dataOra.toDate ? d.dataOra.toDate() : new Date(d.dataOra);
+          const dateRoma = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit",
+          }).format(dt);
+          if (dateRoma !== todayRoma) return;
+          if (d.giornataintera === true) { matOk.add(d.postazione); pomOk.add(d.postazione); return; }
+          const h = parseInt(new Intl.DateTimeFormat("en-US", {
+            timeZone: "Europe/Rome", hour: "numeric", hour12: false,
+          }).format(dt));
+          if (h >= 6  && h < 14) matOk.add(d.postazione);
+          if (h >= 14 && h < 20) pomOk.add(d.postazione);
+        });
 
-        const h = parseInt(new Intl.DateTimeFormat("en-US", {
-          timeZone: "Europe/Rome", hour: "numeric", hour12: false,
-        }).format(dt));
+        const missMat = ALL_STATIONS.filter(p => !matOk.has(p));
+        const missPom = ALL_STATIONS.filter(p => !pomOk.has(p));
+        const oggi = new Intl.DateTimeFormat("it-IT", {
+          timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "numeric",
+        }).format(new Date());
+        const oraAdesso = new Intl.DateTimeFormat("it-IT", {
+          timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit",
+        }).format(new Date());
 
-        if (h >= 6  && h < 14) matOk.add(d.postazione);
-        if (h >= 14 && h < 20) pomOk.add(d.postazione);
-      });
+        let msg = `Stato diari - ${oggi} ore ${oraAdesso}
 
-      const missMat = ALL_STATIONS.filter(p => !matOk.has(p));
-      const missPom = ALL_STATIONS.filter(p => !pomOk.has(p));
+`;
+        msg += `Mattina (09-14): ${matOk.size}/26
+`;
+        msg += missMat.length === 0
+          ? `Tutte compilate
+`
+          : missMat.map(p => `- ${p} (${(LIDI_MAP[p]||[]).join(", ")})`).join("
+") + "
+";
+        msg += `
+Pomeriggio (14-19:30): ${pomOk.size}/26
+`;
+        msg += missPom.length === 0
+          ? `Tutte compilate`
+          : missPom.map(p => `- ${p} (${(LIDI_MAP[p]||[]).join(", ")})`).join("
+");
 
-      const oggi = new Intl.DateTimeFormat("it-IT", {
-        timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "numeric",
-      }).format(new Date());
-
-      const oraAdesso = new Intl.DateTimeFormat("it-IT", {
-        timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit",
-      }).format(new Date());
-
-      let msg = `📋 Stato diari — ${oggi} ore ${oraAdesso}\n\n`;
-
-      msg += `🌅 Mattina (09-14): ${matOk.size}/26 compilate\n`;
-      if (missMat.length === 0) {
-        msg += `✅ Tutte compilate\n`;
-      } else {
-        msg += missMat.map(p => `• ${p} (${(LIDI_MAP[p] || []).join(", ")})`).join("\n") + "\n";
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text: msg }),
+        });
       }
-
-      msg += `\n🌇 Pomeriggio (14-19:30): ${pomOk.size}/26 compilate\n`;
-      if (missPom.length === 0) {
-        msg += `✅ Tutte compilate`;
-      } else {
-        msg += missPom.map(p => `• ${p} (${(LIDI_MAP[p] || []).join(", ")})`).join("\n");
-      }
-
-      const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-      await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: msg }),
-      });
+    } catch(e) {
+      console.error("Webhook error:", e.message);
     }
+    res.status(200).send("OK");
   }
 );
