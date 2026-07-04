@@ -283,24 +283,24 @@ exports.telegramWebhook = onRequest(
           timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit",
         }).format(new Date());
 
-        let msg = `Stato diari - ${oggi} ore ${oraAdesso}
-
-`;
-        msg += `Mattina (09-14): ${matOk.size}/26
-`;
-        msg += missMat.length === 0
-          ? `Tutte compilate
-`
-          : missMat.map(p => `- ${p} (${(LIDI_MAP[p]||[]).join(", ")})`).join("
-") + "
-";
-        msg += `
-Pomeriggio (14-19:30): ${pomOk.size}/26
-`;
-        msg += missPom.length === 0
-          ? `Tutte compilate`
-          : missPom.map(p => `- ${p} (${(LIDI_MAP[p]||[]).join(", ")})`).join("
-");
+        const sep = "\n";
+        let lines = [];
+        lines.push("Stato diari - " + oggi + " ore " + oraAdesso);
+        lines.push("");
+        lines.push("Mattina (09-14): " + matOk.size + "/26");
+        if (missMat.length === 0) {
+          lines.push("Tutte compilate");
+        } else {
+          missMat.forEach(p => lines.push("- " + p + " (" + (LIDI_MAP[p]||[]).join(", ") + ")"));
+        }
+        lines.push("");
+        lines.push("Pomeriggio (14-19:30): " + pomOk.size + "/26");
+        if (missPom.length === 0) {
+          lines.push("Tutte compilate");
+        } else {
+          missPom.forEach(p => lines.push("- " + p + " (" + (LIDI_MAP[p]||[]).join(", ") + ")"));
+        }
+        const msg = lines.join(sep);
 
         await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: "POST",
