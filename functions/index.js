@@ -250,7 +250,7 @@ exports.telegramWebhook = onRequest(
     if (!body || !body.message) return;
 
     const chatId  = body.message.chat.id;
-    const text    = (body.message.text || "").trim().toLowerCase();
+    const text    = (body.message.text || "").trim().toLowerCase().split("@")[0];
 
     if (text === "/mancanti" || text === "/stato") {
       const snap = await admin.firestore().collection("diariogiornaliero").limit(1000).get();
