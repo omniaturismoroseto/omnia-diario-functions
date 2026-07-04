@@ -251,7 +251,55 @@ exports.telegramWebhook = onRequest(
       const chatId = body.message.chat.id;
       const text   = (body.message.text || "").trim().toLowerCase().split("@")[0];
 
-      if (text === "/mancanti" || text === "/stato") {
+      if (text === "/mancanze") {
+        const snap = await admin.firestore().collection("diariogiornaliero").limit(1000).get();
+        const todayRoma = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(new Date());
+
+        const oggi = new Intl.DateTimeFormat("it-IT", {
+          timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "numeric",
+        }).format(new Date());
+        const oraAdesso = new Intl.DateTimeFormat("it-IT", {
+          timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit",
+        }).format(new Date());
+
+        const docConMancanze = snap.docs.map(d => d.data()).filter(d => {
+          if (!d.dataOra) return false;
+          const dt = d.dataOra.toDate ? d.dataOra.toDate() : new Date(d.dataOra);
+          const dateRoma = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit",
+          }).format(dt);
+          return dateRoma === todayRoma && getMancanze(d).length > 0;
+        });
+
+        let lines = [];
+        lines.push("Mancanze dotazioni - " + oggi + " ore " + oraAdesso);
+        lines.push("");
+
+        if (docConMancanze.length === 0) {
+          lines.push("Nessuna mancanza segnalata oggi.");
+        } else {
+          docConMancanze.forEach(d => {
+            const mancanze = getMancanze(d);
+            const dt = d.dataOra.toDate ? d.dataOra.toDate() : new Date(d.dataOra);
+            const ora = new Intl.DateTimeFormat("it-IT", {
+              timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit",
+            }).format(dt);
+            lines.push(d.postazione + " - " + (d.bagnino || "Bagnino") + " ore " + ora + ":");
+            mancanze.forEach(m => lines.push("  - " + m));
+            lines.push("");
+          });
+        }
+
+        await fetch("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text: lines.join("
+") }),
+        });
+
+      } else if (text === "/mancanti" || text === "/stato") {
         const snap = await admin.firestore().collection("diariogiornaliero").limit(1000).get();
 
         const todayRoma = new Intl.DateTimeFormat("en-CA", {
