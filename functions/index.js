@@ -295,8 +295,7 @@ exports.telegramWebhook = onRequest(
         await fetch("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, text: lines.join("
-") }),
+          body: JSON.stringify({ chat_id: chatId, text: lines.join("\n") }),
         });
 
       } else if (text === "/mancanti" || text === "/stato") {
