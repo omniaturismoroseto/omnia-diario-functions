@@ -242,7 +242,7 @@ async function inviaPromemoria(turno, hStart, hEnd, oraRem) {
 const { onRequest } = require("firebase-functions/v2/https");
 
 exports.telegramWebhook = onRequest(
-  { region: REGION },
+  { region: REGION, invoker: "public", cors: false },
   async (req, res) => {
     res.status(200).send("OK"); // risponde subito a Telegram
 
